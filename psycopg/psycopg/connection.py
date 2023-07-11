@@ -911,20 +911,26 @@ class Connection(BaseConnection[Row]):
             with tx:
                 yield tx
 
-    def notifies(self) -> Generator[Notify, None, None]:
+    def notifies(
+        self,
+        select_timeout: Optional[float] = 0.1,
+        yield_timeouts: bool = False
+    ) -> Generator[Optional[Notify], None, None]:
         """
         Yield `Notify` objects as soon as they are received from the database.
         """
         while True:
             with self.lock:
                 try:
-                    ns = self.wait(notifies(self.pgconn))
+                    ns = self.wait(notifies(self.pgconn), timeout=select_timeout)
                 except e._NO_TRACEBACK as ex:
                     raise ex.with_traceback(None)
             enc = pgconn_encoding(self.pgconn)
             for pgn in ns:
                 n = Notify(pgn.relname.decode(enc), pgn.extra.decode(enc), pgn.be_pid)
                 yield n
+            if yield_timeouts:
+                return None
 
     @contextmanager
     def pipeline(self) -> Iterator[Pipeline]:
